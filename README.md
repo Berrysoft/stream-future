@@ -3,7 +3,7 @@
 This is a `no_std` compatible library to author a `Future` with `Stream` implemented.
 You can author simply with `await` and `yield`.
 
-A nightly feature `generator` is required.
+A nightly feature `generators` is required.
 
 ``` rust
 #![feature(generators)]
