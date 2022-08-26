@@ -43,3 +43,8 @@ assert_eq!(bar, 0);
 
 You can specify the yield type in the attribute. Either the yield type or return type could be `()`.
 You can simply `await` other futures, and the macro will handle that.
+
+## Compare with `async-stream`
+You can return any value you like! The caller can simply `await` and get the value without iterate the stream.
+
+This library is 7x faster than `async-stream`, according to our benchmark.

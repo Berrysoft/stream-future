@@ -19,3 +19,4 @@ pin-project = "1.0"
 anyhow = "1.0"
 tokio = { version = "1", features = ["macros", "rt"] }
 tokio-stream = "0.1"
+async-stream = "0.3"
