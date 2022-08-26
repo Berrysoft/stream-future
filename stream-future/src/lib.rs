@@ -95,19 +95,19 @@ impl ResumeTy {
 
 #[doc(hidden)]
 #[pin_project]
-pub struct GenFuture<P, T: Generator<ResumeTy, Yield = Poll<P>>> {
+pub struct GenStreamFuture<P, T: Generator<ResumeTy, Yield = Poll<P>>> {
     #[pin]
     gen: T,
     ret: Option<T::Return>,
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> GenFuture<P, T> {
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> GenStreamFuture<P, T> {
     pub const fn new(gen: T) -> Self {
         Self { gen, ret: None }
     }
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Future for GenFuture<P, T> {
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Future for GenStreamFuture<P, T> {
     type Output = T::Return;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -131,7 +131,7 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Future for GenFuture<P, T> {
     }
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenFuture<P, T> {
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenStreamFuture<P, T> {
     type Item = P;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

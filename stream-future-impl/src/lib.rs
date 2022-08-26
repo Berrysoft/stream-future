@@ -54,7 +54,7 @@ pub fn stream(attr: TokenStream, input: TokenStream) -> TokenStream {
     func.block = Box::new(
         Block::parse
             .parse2(quote! {{
-                ::stream_future::GenFuture::<#p_type, _>::new(static move |__cx: ::stream_future::ResumeTy| {
+                ::stream_future::GenStreamFuture::<#p_type, _>::new(static move |__cx: ::stream_future::ResumeTy| {
                     #old_block
                 })
             }})
