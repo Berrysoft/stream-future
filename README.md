@@ -1,5 +1,7 @@
 # stream-future
 
+[![crates.io](https://img.shields.io/crates/v/stream-future)](https://crates.io/crates/stream-future)
+
 This is a `no_std` compatible library to author a `Future` with `Stream` implemented.
 You can author simply with `await` and `yield`.
 
