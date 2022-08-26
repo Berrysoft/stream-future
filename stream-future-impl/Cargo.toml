@@ -2,7 +2,13 @@
 name = "stream-future-impl"
 version = "0.1.0"
 authors = ["Berrysoft <Strawberry_Str@hotmail.com"]
+categories = ["stream", "future", "no-std"]
+description = "Implement an async iterator with return value."
 edition = "2021"
+keywords = ["stream", "future"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/Berrysoft/stream-future"
 
 [lib]
 proc-macro = true
