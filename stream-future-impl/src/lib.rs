@@ -7,6 +7,7 @@ use syn::{
     AttributeArgs, Block, Expr, ItemFn, Lifetime, Lit, Meta, NestedMeta, ReturnType, Type,
 };
 
+/// See the crate document of [`stream-future`].
 #[proc_macro_attribute]
 pub fn stream(attr: TokenStream, input: TokenStream) -> TokenStream {
     let attr = parse_macro_input!(attr as AttributeArgs);

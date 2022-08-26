@@ -72,6 +72,7 @@ use core::{
 };
 use pin_project::pin_project;
 
+#[doc(no_inline)]
 pub use futures_core::Stream;
 pub use stream_future_impl::stream;
 

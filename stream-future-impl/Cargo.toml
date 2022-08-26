@@ -1,6 +1,6 @@
 [package]
 name = "stream-future-impl"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Berrysoft <Strawberry_Str@hotmail.com"]
 categories = ["asynchronous", "no-std"]
 description = "Implement an async iterator with return value."

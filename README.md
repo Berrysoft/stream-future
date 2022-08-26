@@ -1,6 +1,7 @@
 # stream-future
 
 [![crates.io](https://img.shields.io/crates/v/stream-future)](https://crates.io/crates/stream-future)
+[![docs.rs](https://img.shields.io/badge/docs.rs-stream--future-latest)](https://docs.rs/stream-future)
 
 This is a `no_std` compatible library to author a `Future` with `Stream` implemented.
 You can author simply with `await` and `yield`.
@@ -39,3 +40,6 @@ while let Some(prog) = bar.next().await {
 let bar = bar.await?;
 assert_eq!(bar, 0);
 ```
+
+You can specify the yield type in the attribute. Either the yield type or return type could be `()`.
+You can simply `await` other futures, and the macro will handle that.
