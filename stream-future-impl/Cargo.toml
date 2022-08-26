@@ -2,7 +2,7 @@
 name = "stream-future-impl"
 version = "0.1.0"
 authors = ["Berrysoft <Strawberry_Str@hotmail.com"]
-categories = ["stream", "future", "no-std"]
+categories = ["asynchronous", "no-std"]
 description = "Implement an async iterator with return value."
 edition = "2021"
 keywords = ["stream", "future"]
