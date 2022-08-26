@@ -1,6 +1,7 @@
 [package]
 name = "stream-future-impl"
 version = "0.1.0"
+authors = ["Berrysoft <Strawberry_Str@hotmail.com"]
 edition = "2021"
 
 [lib]
