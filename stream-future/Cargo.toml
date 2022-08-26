@@ -11,7 +11,7 @@ readme = "README.md"
 repository = "https://github.com/Berrysoft/stream-future"
 
 [dependencies]
-stream-future-impl = { path = "../stream-future-impl" }
+stream-future-impl = { path = "../stream-future-impl", version = "0.1" }
 futures-core = "0.3"
 pin-project = "1.0"
 
