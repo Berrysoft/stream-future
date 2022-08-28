@@ -17,6 +17,7 @@ pin-project = "1.0"
 
 [dev-dependencies]
 anyhow = "1.0"
-tokio = { version = "1", features = ["macros", "rt"] }
+tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 tokio-stream = "0.1"
+futures-util = "0.3"
 async-stream = "0.3"

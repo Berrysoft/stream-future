@@ -62,6 +62,7 @@
 
 #![no_std]
 #![feature(generator_trait)]
+#![feature(trait_alias)]
 
 use core::{
     future::Future,
@@ -93,6 +94,8 @@ impl ResumeTy {
         f.poll(self.get_context())
     }
 }
+
+pub trait StreamFuture<R, P> = Future<Output = R> + Stream<Item = P>;
 
 #[doc(hidden)]
 #[pin_project]
@@ -152,36 +155,60 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenStreamFuture<P, T
 }
 
 #[doc(hidden)]
-#[pin_project]
-pub struct GenTryStreamFuture<
-    P,
-    R,
-    E,
-    T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>,
-> {
-    #[pin]
-    gen: T,
-    ret: Option<R>,
+pub trait ResultTypes {
+    type Return;
+    type Error;
+
+    fn into_result(self) -> Result<Self::Return, Self::Error>;
+    fn make_ok(value: Self::Return) -> Self;
 }
 
-impl<P, R, E, T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>>
-    GenTryStreamFuture<P, R, E, T>
+impl<T, E> ResultTypes for Result<T, E> {
+    type Return = T;
+    type Error = E;
+
+    fn into_result(self) -> Result<Self::Return, Self::Error> {
+        self
+    }
+    fn make_ok(value: Self::Return) -> Self {
+        Ok(value)
+    }
+}
+
+pub trait TryStreamFuture<R: ResultTypes, P> =
+    Future<Output = R> + Stream<Item = Result<P, <R as ResultTypes>::Error>>;
+
+#[doc(hidden)]
+#[pin_project]
+pub struct GenTryStreamFuture<P, T: Generator<ResumeTy, Yield = Poll<P>>>
+where
+    T::Return: ResultTypes,
+{
+    #[pin]
+    gen: T,
+    ret: Option<<T::Return as ResultTypes>::Return>,
+}
+
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> GenTryStreamFuture<P, T>
+where
+    T::Return: ResultTypes,
 {
     pub const fn new(gen: T) -> Self {
         Self { gen, ret: None }
     }
 }
 
-impl<P, R, E, T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>> Future
-    for GenTryStreamFuture<P, R, E, T>
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Future for GenTryStreamFuture<P, T>
+where
+    T::Return: ResultTypes,
 {
-    type Output = Result<R, E>;
+    type Output = T::Return;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let cx = NonNull::from(cx);
         let this = self.project();
         if let Some(x) = this.ret.take() {
-            Poll::Ready(Ok(x))
+            Poll::Ready(T::Return::make_ok(x))
         } else {
             let gen = this.gen;
             match gen.resume(ResumeTy(cx.cast())) {
@@ -198,10 +225,11 @@ impl<P, R, E, T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>> Fu
     }
 }
 
-impl<P, R, E, T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>> Stream
-    for GenTryStreamFuture<P, R, E, T>
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenTryStreamFuture<P, T>
+where
+    T::Return: ResultTypes,
 {
-    type Item = Result<P, E>;
+    type Item = Result<P, <T::Return as ResultTypes>::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -211,7 +239,7 @@ impl<P, R, E, T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>> St
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(p) => Poll::Ready(Some(Ok(p))),
             },
-            GeneratorState::Complete(x) => match x {
+            GeneratorState::Complete(x) => match x.into_result() {
                 Ok(x) => {
                     *this.ret = Some(x);
                     Poll::Ready(None)

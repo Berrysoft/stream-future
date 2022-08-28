@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use proc_macro2::Ident;
 use quote::{quote, ToTokens};
 use syn::{
     parse::{Parse, Parser},
@@ -8,8 +9,14 @@ use syn::{
 };
 
 /// See the crate document of [`stream-future`].
-#[proc_macro_attribute]
-pub fn stream(attr: TokenStream, input: TokenStream) -> TokenStream {
+fn stream_impl(
+    attr: TokenStream,
+    input: TokenStream,
+    gen_ty: &str,
+    trait_alias: &str,
+) -> TokenStream {
+    let gen_ty = Ident::parse.parse_str(gen_ty).unwrap();
+    let trait_alias = Ident::parse.parse_str(trait_alias).unwrap();
     let attr = parse_macro_input!(attr as AttributeArgs);
     let mut p_type = Type::parse.parse2(quote!(())).unwrap();
     let mut lifetime = Lifetime::parse.parse2(quote!('static)).unwrap();
@@ -45,7 +52,7 @@ pub fn stream(attr: TokenStream, input: TokenStream) -> TokenStream {
     };
     func.sig.output = ReturnType::parse
         .parse2(quote! {
-            -> impl ::core::future::Future<Output = #future_return_type> + ::stream_future::Stream<Item = #p_type> + #lifetime
+            -> impl ::stream_future::#trait_alias<#future_return_type, #p_type> + #lifetime
         })
         .unwrap();
     let mut old_block = func.block;
@@ -55,7 +62,7 @@ pub fn stream(attr: TokenStream, input: TokenStream) -> TokenStream {
     func.block = Box::new(
         Block::parse
             .parse2(quote! {{
-                ::stream_future::GenStreamFuture::<#p_type, _>::new(static move |__cx: ::stream_future::ResumeTy| {
+                ::stream_future::#gen_ty::<#p_type, _>::new(static move |__cx: ::stream_future::ResumeTy| {
                     #old_block
                 })
             }})
@@ -116,4 +123,14 @@ impl VisitMut for AwaitYieldVisitor {
     }
 
     fn visit_expr_async_mut(&mut self, _i: &mut syn::ExprAsync) {}
+}
+
+#[proc_macro_attribute]
+pub fn stream(attr: TokenStream, input: TokenStream) -> TokenStream {
+    stream_impl(attr, input, "GenStreamFuture", "StreamFuture")
+}
+
+#[proc_macro_attribute]
+pub fn try_stream(attr: TokenStream, input: TokenStream) -> TokenStream {
+    stream_impl(attr, input, "GenTryStreamFuture", "TryStreamFuture")
 }

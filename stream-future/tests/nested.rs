@@ -1,7 +1,6 @@
 #![feature(generators)]
 
 use std::future::ready;
-
 use stream_future::*;
 
 #[tokio::test]
