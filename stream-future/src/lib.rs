@@ -63,10 +63,11 @@
 #![no_std]
 #![feature(generator_trait)]
 #![feature(trait_alias)]
+#![feature(try_trait_v2, try_trait_v2_residual)]
 
 use core::{
     future::Future,
-    ops::{Generator, GeneratorState},
+    ops::{ControlFlow, FromResidual, Generator, GeneratorState, Residual, Try},
     pin::Pin,
     ptr::NonNull,
     task::{Context, Poll},
@@ -154,44 +155,34 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenStreamFuture<P, T
     }
 }
 
-#[doc(hidden)]
-pub trait ResultTypes {
-    type Return;
-    type Error;
-
-    fn into_result(self) -> Result<Self::Return, Self::Error>;
-    fn make_ok(value: Self::Return) -> Self;
+pub trait TryStreamFuture<R: Try, P>:
+    Future<Output = R> + Stream<Item = <<R as Try>::Residual as Residual<P>>::TryType>
+where
+    R::Residual: Residual<P>,
+{
 }
 
-impl<T, E> ResultTypes for Result<T, E> {
-    type Return = T;
-    type Error = E;
-
-    fn into_result(self) -> Result<Self::Return, Self::Error> {
-        self
-    }
-    fn make_ok(value: Self::Return) -> Self {
-        Ok(value)
-    }
+impl<T, R: Try, P> TryStreamFuture<R, P> for T
+where
+    R::Residual: Residual<P>,
+    T: Future<Output = R> + Stream<Item = <<R as Try>::Residual as Residual<P>>::TryType>,
+{
 }
-
-pub trait TryStreamFuture<R: ResultTypes, P> =
-    Future<Output = R> + Stream<Item = Result<P, <R as ResultTypes>::Error>>;
 
 #[doc(hidden)]
 #[pin_project]
 pub struct GenTryStreamFuture<P, T: Generator<ResumeTy, Yield = Poll<P>>>
 where
-    T::Return: ResultTypes,
+    T::Return: Try,
 {
     #[pin]
     gen: T,
-    ret: Option<<T::Return as ResultTypes>::Return>,
+    ret: Option<<T::Return as Try>::Output>,
 }
 
 impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> GenTryStreamFuture<P, T>
 where
-    T::Return: ResultTypes,
+    T::Return: Try,
 {
     pub const fn new(gen: T) -> Self {
         Self { gen, ret: None }
@@ -200,7 +191,7 @@ where
 
 impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Future for GenTryStreamFuture<P, T>
 where
-    T::Return: ResultTypes,
+    T::Return: Try,
 {
     type Output = T::Return;
 
@@ -208,7 +199,7 @@ where
         let cx = NonNull::from(cx);
         let this = self.project();
         if let Some(x) = this.ret.take() {
-            Poll::Ready(T::Return::make_ok(x))
+            Poll::Ready(T::Return::from_output(x))
         } else {
             let gen = this.gen;
             match gen.resume(ResumeTy(cx.cast())) {
@@ -227,9 +218,10 @@ where
 
 impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenTryStreamFuture<P, T>
 where
-    T::Return: ResultTypes,
+    T::Return: Try,
+    <T::Return as Try>::Residual: Residual<P>,
 {
-    type Item = Result<P, <T::Return as ResultTypes>::Error>;
+    type Item = <<T::Return as Try>::Residual as Residual<P>>::TryType;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -237,14 +229,14 @@ where
         match gen.resume(ResumeTy(NonNull::from(cx).cast())) {
             GeneratorState::Yielded(p) => match p {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(p) => Poll::Ready(Some(Ok(p))),
+                Poll::Ready(p) => Poll::Ready(Some(Self::Item::from_output(p))),
             },
-            GeneratorState::Complete(x) => match x.into_result() {
-                Ok(x) => {
+            GeneratorState::Complete(x) => match x.branch() {
+                ControlFlow::Continue(x) => {
                     *this.ret = Some(x);
                     Poll::Ready(None)
                 }
-                Err(e) => Poll::Ready(Some(Err(e))),
+                ControlFlow::Break(e) => Poll::Ready(Some(Self::Item::from_residual(e))),
             },
         }
     }
