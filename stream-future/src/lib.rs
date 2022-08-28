@@ -150,3 +150,74 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenStreamFuture<P, T
         }
     }
 }
+
+#[doc(hidden)]
+#[pin_project]
+pub struct GenTryStreamFuture<
+    P,
+    R,
+    E,
+    T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>,
+> {
+    #[pin]
+    gen: T,
+    ret: Option<R>,
+}
+
+impl<P, R, E, T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>>
+    GenTryStreamFuture<P, R, E, T>
+{
+    pub const fn new(gen: T) -> Self {
+        Self { gen, ret: None }
+    }
+}
+
+impl<P, R, E, T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>> Future
+    for GenTryStreamFuture<P, R, E, T>
+{
+    type Output = Result<R, E>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let cx = NonNull::from(cx);
+        let this = self.project();
+        if let Some(x) = this.ret.take() {
+            Poll::Ready(Ok(x))
+        } else {
+            let gen = this.gen;
+            match gen.resume(ResumeTy(cx.cast())) {
+                GeneratorState::Yielded(p) => match p {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(_) => {
+                        unsafe { cx.as_ref() }.waker().wake_by_ref();
+                        Poll::Pending
+                    }
+                },
+                GeneratorState::Complete(x) => Poll::Ready(x),
+            }
+        }
+    }
+}
+
+impl<P, R, E, T: Generator<ResumeTy, Yield = Poll<P>, Return = Result<R, E>>> Stream
+    for GenTryStreamFuture<P, R, E, T>
+{
+    type Item = Result<P, E>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let gen = this.gen;
+        match gen.resume(ResumeTy(NonNull::from(cx).cast())) {
+            GeneratorState::Yielded(p) => match p {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(p) => Poll::Ready(Some(Ok(p))),
+            },
+            GeneratorState::Complete(x) => match x {
+                Ok(x) => {
+                    *this.ret = Some(x);
+                    Poll::Ready(None)
+                }
+                Err(e) => Poll::Ready(Some(Err(e))),
+            },
+        }
+    }
+}
