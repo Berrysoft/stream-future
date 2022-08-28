@@ -43,8 +43,7 @@ fn stream_impl(
         }
     }
 
-    let func = input.clone();
-    let mut func = parse_macro_input!(func as ItemFn);
+    let mut func = parse_macro_input!(input as ItemFn);
     func.sig.asyncness = None;
     let future_return_type = match func.sig.output {
         ReturnType::Default => Box::new(Type::parse.parse2(quote!(())).unwrap()),

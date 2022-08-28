@@ -20,3 +20,27 @@ async fn basic() {
     assert_eq!((&mut gf).try_collect::<Vec<_>>().await.unwrap(), [0, 1, 2]);
     assert_eq!(gf.await.unwrap(), true);
 }
+
+#[tokio::test]
+async fn err() {
+    #[try_stream(i32)]
+    async fn foo(i: i32) -> Result<()> {
+        yield 0;
+        if i == 0 {
+            anyhow::bail!("error");
+        }
+        yield 1;
+        Ok(())
+    }
+
+    {
+        let gf = foo(0);
+        tokio::pin!(gf);
+        assert!(gf.try_collect::<Vec<_>>().await.is_err());
+    }
+    {
+        let gf = foo(1);
+        tokio::pin!(gf);
+        assert_eq!(gf.try_collect::<Vec<_>>().await.unwrap(), [0, 1]);
+    }
+}
