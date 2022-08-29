@@ -9,7 +9,6 @@
 //! enum Prog {
 //!     Stage1,
 //!     Stage2,
-//!     End,
 //! }
 //!
 //! #[stream(Prog)]
@@ -18,7 +17,6 @@
 //!     // some works...
 //!     yield Prog::Stage2;
 //!     // some other works...
-//!     yield Prog::End;
 //!     Ok(0)
 //! }
 //!
@@ -59,8 +57,43 @@
 //! foo("Hello world!").await;
 //! # }
 //! ```
+//!
+//! There's also a macro [`try_stream`] (usually used) to implement a stream iterates [`Result`].
+//!
+//! ```
+//! #![feature(generators)]
+//! # use stream_future::try_stream;
+//! # use anyhow::Result;
+//! #[derive(Debug)]
+//! enum Prog {
+//!     Stage1,
+//!     Stage2,
+//! }
+//!
+//! #[try_stream(Prog)]
+//! async fn foo() -> Result<()> {
+//!     yield Prog::Stage1;
+//!     // some works...
+//!     yield Prog::Stage2;
+//!     // some other works...
+//!     Ok(())
+//! }
+//!
+//! # use tokio_stream::StreamExt;
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() -> Result<()> {
+//! let bar = foo();
+//! tokio::pin!(bar);
+//! while let Some(prog) = bar.try_next().await? {
+//!     println!("{:?}", prog);
+//! }
+//! # Ok(())
+//! # }
+//! ```
 
 #![no_std]
+#![warn(missing_docs)]
+#![feature(associated_type_bounds)]
 #![feature(generator_trait)]
 #![feature(trait_alias)]
 #![feature(try_trait_v2, try_trait_v2_residual)]
@@ -76,7 +109,8 @@ use pin_project::pin_project;
 
 #[doc(no_inline)]
 pub use futures_core::Stream;
-pub use stream_future_impl::stream;
+#[doc(no_inline)]
+pub use stream_future_impl::{stream, try_stream};
 
 /// See [`core::future::ResumeTy`].
 #[doc(hidden)]
@@ -96,6 +130,7 @@ impl ResumeTy {
     }
 }
 
+/// A convenience of [`Future`] returns `R` and [`Stream`] iterates `P`.
 pub trait StreamFuture<R, P> = Future<Output = R> + Stream<Item = P>;
 
 #[doc(hidden)]
@@ -155,44 +190,27 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenStreamFuture<P, T
     }
 }
 
-pub trait TryStreamFuture<R: Try, P>:
-    Future<Output = R> + Stream<Item = <<R as Try>::Residual as Residual<P>>::TryType>
-where
-    R::Residual: Residual<P>,
-{
-}
-
-impl<T, R: Try, P> TryStreamFuture<R, P> for T
-where
-    R::Residual: Residual<P>,
-    T: Future<Output = R> + Stream<Item = <<R as Try>::Residual as Residual<P>>::TryType>,
-{
-}
+/// A convenience of [`StreamFuture`] which handles [`Try`].
+/// For example, `TryStreamFuture<Result<R>, P>` is `StreamFuture<Result<R>, Result<P>>`,
+/// and `TryStreamFuture<Option<R>, P>` is `StreamFuture<Option<R>, Option<P>>`.
+pub trait TryStreamFuture<R: Try<Residual: Residual<P>>, P> =
+    Future<Output = R> + Stream<Item = <<R as Try>::Residual as Residual<P>>::TryType>;
 
 #[doc(hidden)]
 #[pin_project]
-pub struct GenTryStreamFuture<P, T: Generator<ResumeTy, Yield = Poll<P>>>
-where
-    T::Return: Try,
-{
+pub struct GenTryStreamFuture<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> {
     #[pin]
     gen: T,
     ret: Option<<T::Return as Try>::Output>,
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> GenTryStreamFuture<P, T>
-where
-    T::Return: Try,
-{
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> GenTryStreamFuture<P, T> {
     pub const fn new(gen: T) -> Self {
         Self { gen, ret: None }
     }
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Future for GenTryStreamFuture<P, T>
-where
-    T::Return: Try,
-{
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> Future for GenTryStreamFuture<P, T> {
     type Output = T::Return;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -216,10 +234,8 @@ where
     }
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenTryStreamFuture<P, T>
-where
-    T::Return: Try,
-    <T::Return as Try>::Residual: Residual<P>,
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try<Residual: Residual<P>>>> Stream
+    for GenTryStreamFuture<P, T>
 {
     type Item = <<T::Return as Try>::Residual as Residual<P>>::TryType;
 
