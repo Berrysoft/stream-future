@@ -62,6 +62,7 @@
 //!
 //! ```
 //! #![feature(generators)]
+//!
 //! # use stream_future::try_stream;
 //! # use anyhow::Result;
 //! #[derive(Debug)]
