@@ -1,9 +1,9 @@
 #![feature(generators)]
 
+use futures_util::StreamExt;
 use std::{future::ready, time::Duration};
 use stream_future::*;
 use tokio::time::interval;
-use tokio_stream::StreamExt;
 
 #[tokio::test]
 async fn basic() {

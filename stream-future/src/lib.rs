@@ -9,7 +9,6 @@
 //! enum Prog {
 //!     Stage1,
 //!     Stage2,
-//!     End,
 //! }
 //!
 //! #[stream(Prog)]
@@ -18,7 +17,6 @@
 //!     // some works...
 //!     yield Prog::Stage2;
 //!     // some other works...
-//!     yield Prog::End;
 //!     Ok(0)
 //! }
 //!
@@ -59,13 +57,50 @@
 //! foo("Hello world!").await;
 //! # }
 //! ```
+//!
+//! There's also a macro [`try_stream`] (usually used) to implement a stream iterates [`Result`].
+//!
+//! ```
+//! #![feature(generators)]
+//! # use stream_future::try_stream;
+//! # use anyhow::Result;
+//! #[derive(Debug)]
+//! enum Prog {
+//!     Stage1,
+//!     Stage2,
+//! }
+//!
+//! #[try_stream(Prog)]
+//! async fn foo() -> Result<()> {
+//!     yield Prog::Stage1;
+//!     // some works...
+//!     yield Prog::Stage2;
+//!     // some other works...
+//!     Ok(())
+//! }
+//!
+//! # use tokio_stream::StreamExt;
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() -> Result<()> {
+//! let bar = foo();
+//! tokio::pin!(bar);
+//! while let Some(prog) = bar.try_next().await? {
+//!     println!("{:?}", prog);
+//! }
+//! # Ok(())
+//! # }
+//! ```
 
 #![no_std]
+#![warn(missing_docs)]
+#![feature(associated_type_bounds)]
 #![feature(generator_trait)]
+#![feature(trait_alias)]
+#![feature(try_trait_v2, try_trait_v2_residual)]
 
 use core::{
     future::Future,
-    ops::{Generator, GeneratorState},
+    ops::{ControlFlow, FromResidual, Generator, GeneratorState, Residual, Try},
     pin::Pin,
     ptr::NonNull,
     task::{Context, Poll},
@@ -74,7 +109,8 @@ use pin_project::pin_project;
 
 #[doc(no_inline)]
 pub use futures_core::Stream;
-pub use stream_future_impl::stream;
+#[doc(no_inline)]
+pub use stream_future_impl::{stream, try_stream};
 
 /// See [`core::future::ResumeTy`].
 #[doc(hidden)]
@@ -93,6 +129,9 @@ impl ResumeTy {
         f.poll(self.get_context())
     }
 }
+
+/// A convenience of [`Future`] returns `R` and [`Stream`] iterates `P`.
+pub trait StreamFuture<R, P> = Future<Output = R> + Stream<Item = P>;
 
 #[doc(hidden)]
 #[pin_project]
@@ -147,6 +186,74 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenStreamFuture<P, T
                 *this.ret = Some(x);
                 Poll::Ready(None)
             }
+        }
+    }
+}
+
+/// A convenience of [`StreamFuture`] which handles [`Try`].
+/// For example, `TryStreamFuture<Result<R>, P>` is `StreamFuture<Result<R>, Result<P>>`,
+/// and `TryStreamFuture<Option<R>, P>` is `StreamFuture<Option<R>, Option<P>>`.
+pub trait TryStreamFuture<R: Try<Residual: Residual<P>>, P> =
+    Future<Output = R> + Stream<Item = <<R as Try>::Residual as Residual<P>>::TryType>;
+
+#[doc(hidden)]
+#[pin_project]
+pub struct GenTryStreamFuture<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> {
+    #[pin]
+    gen: T,
+    ret: Option<<T::Return as Try>::Output>,
+}
+
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> GenTryStreamFuture<P, T> {
+    pub const fn new(gen: T) -> Self {
+        Self { gen, ret: None }
+    }
+}
+
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> Future for GenTryStreamFuture<P, T> {
+    type Output = T::Return;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let cx = NonNull::from(cx);
+        let this = self.project();
+        if let Some(x) = this.ret.take() {
+            Poll::Ready(T::Return::from_output(x))
+        } else {
+            let gen = this.gen;
+            match gen.resume(ResumeTy(cx.cast())) {
+                GeneratorState::Yielded(p) => match p {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(_) => {
+                        unsafe { cx.as_ref() }.waker().wake_by_ref();
+                        Poll::Pending
+                    }
+                },
+                GeneratorState::Complete(x) => Poll::Ready(x),
+            }
+        }
+    }
+}
+
+impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try<Residual: Residual<P>>>> Stream
+    for GenTryStreamFuture<P, T>
+{
+    type Item = <<T::Return as Try>::Residual as Residual<P>>::TryType;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let gen = this.gen;
+        match gen.resume(ResumeTy(NonNull::from(cx).cast())) {
+            GeneratorState::Yielded(p) => match p {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(p) => Poll::Ready(Some(Self::Item::from_output(p))),
+            },
+            GeneratorState::Complete(x) => match x.branch() {
+                ControlFlow::Continue(x) => {
+                    *this.ret = Some(x);
+                    Poll::Ready(None)
+                }
+                ControlFlow::Break(e) => Poll::Ready(Some(Self::Item::from_residual(e))),
+            },
         }
     }
 }
