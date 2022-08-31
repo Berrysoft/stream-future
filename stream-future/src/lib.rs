@@ -131,9 +131,6 @@ impl ResumeTy {
     }
 }
 
-/// A convenience of [`Future`] returns `R` and [`Stream`] iterates `P`.
-pub trait StreamFuture<R, P> = Future<Output = R> + Stream<Item = P>;
-
 #[doc(hidden)]
 #[pin_project]
 pub struct GenStreamFuture<P, T: Generator<ResumeTy, Yield = Poll<P>>> {
@@ -191,11 +188,8 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenStreamFuture<P, T
     }
 }
 
-/// A convenience of [`StreamFuture`] which handles [`Try`].
-/// For example, `TryStreamFuture<Result<R>, P>` is `StreamFuture<Result<R>, Result<P>>`,
-/// and `TryStreamFuture<Option<R>, P>` is `StreamFuture<Option<R>, Option<P>>`.
-pub trait TryStreamFuture<R: Try<Residual: Residual<P>>, P> =
-    Future<Output = R> + Stream<Item = <<R as Try>::Residual as Residual<P>>::TryType>;
+#[doc(hidden)]
+pub type TryStreamItemType<R, P> = <<R as Try>::Residual as Residual<P>>::TryType;
 
 #[doc(hidden)]
 #[pin_project]

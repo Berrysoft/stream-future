@@ -9,14 +9,8 @@ use syn::{
 };
 
 /// See the crate document of [`stream-future`].
-fn stream_impl(
-    attr: TokenStream,
-    input: TokenStream,
-    gen_ty: &str,
-    trait_alias: &str,
-) -> TokenStream {
+fn stream_impl(attr: TokenStream, input: TokenStream, gen_ty: &str, is_try: bool) -> TokenStream {
     let gen_ty = Ident::parse.parse_str(gen_ty).unwrap();
-    let trait_alias = Ident::parse.parse_str(trait_alias).unwrap();
     let attr = parse_macro_input!(attr as AttributeArgs);
     let mut p_type = Type::parse.parse2(quote!(())).unwrap();
     let mut lifetime = Lifetime::parse.parse2(quote!('static)).unwrap();
@@ -50,8 +44,14 @@ fn stream_impl(
         ReturnType::Type(_, t) => t,
     };
     func.sig.output = ReturnType::parse
-        .parse2(quote! {
-            -> impl ::stream_future::#trait_alias<#future_return_type, #p_type> + #lifetime
+        .parse2(if !is_try {
+            quote! {
+                -> impl ::core::future::Future<Output = #future_return_type> + ::stream_future::Stream<Item = #p_type> + #lifetime
+            }
+        } else {
+            quote! {
+                -> impl ::core::future::Future<Output = #future_return_type> + ::stream_future::Stream<Item = ::stream_future::TryStreamItemType<#future_return_type, #p_type>> + #lifetime
+            }
         })
         .unwrap();
     let mut old_block = func.block;
@@ -126,10 +126,10 @@ impl VisitMut for AwaitYieldVisitor {
 
 #[proc_macro_attribute]
 pub fn stream(attr: TokenStream, input: TokenStream) -> TokenStream {
-    stream_impl(attr, input, "GenStreamFuture", "StreamFuture")
+    stream_impl(attr, input, "GenStreamFuture", false)
 }
 
 #[proc_macro_attribute]
 pub fn try_stream(attr: TokenStream, input: TokenStream) -> TokenStream {
-    stream_impl(attr, input, "GenTryStreamFuture", "TryStreamFuture")
+    stream_impl(attr, input, "GenTryStreamFuture", true)
 }
