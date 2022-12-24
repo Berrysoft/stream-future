@@ -61,7 +61,7 @@ fn stream_impl(attr: TokenStream, input: TokenStream, gen_ty: &str, is_try: bool
     func.block = Box::new(
         Block::parse
             .parse2(quote! {{
-                ::stream_future::#gen_ty::<#p_type, _>::new(static move |__cx: ::stream_future::ResumeTy| {
+                ::stream_future::#gen_ty::<#p_type, _>::new(static move |#[allow(unused_mut)] mut __cx: ::stream_future::ResumeTy| {
                     #old_block
                 })
             }})
@@ -101,24 +101,28 @@ impl VisitMut for AwaitYieldVisitor {
                     })
                     .unwrap();
             }
+            Expr::Yield(expr_yield) => {
+                let mut inner_expr = expr_yield
+                    .expr
+                    .take()
+                    .unwrap_or_else(|| Box::new(Expr::parse.parse2(quote!(())).unwrap()));
+                self.visit_expr_mut(&mut inner_expr);
+                expr_yield.expr = Some(Box::new(
+                    Expr::parse
+                        .parse2(quote!(::core::task::Poll::Ready(
+                            #[allow(unused_parens)]
+                            #inner_expr
+                        )))
+                        .unwrap(),
+                ));
+                *i = Expr::parse
+                    .parse2(quote! {
+                        __cx = #expr_yield
+                    })
+                    .unwrap()
+            }
             _ => visit_expr_mut(self, i),
         }
-    }
-
-    fn visit_expr_yield_mut(&mut self, i: &mut syn::ExprYield) {
-        let mut inner_expr = i
-            .expr
-            .take()
-            .unwrap_or_else(|| Box::new(Expr::parse.parse2(quote!(())).unwrap()));
-        self.visit_expr_mut(&mut inner_expr);
-        i.expr = Some(Box::new(
-            Expr::parse
-                .parse2(quote!(::core::task::Poll::Ready(
-                    #[allow(unused_parens)]
-                    #inner_expr
-                )))
-                .unwrap(),
-        ));
     }
 
     fn visit_expr_async_mut(&mut self, _i: &mut syn::ExprAsync) {}
