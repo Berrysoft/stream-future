@@ -45,7 +45,7 @@
 //!     Stage2,
 //! }
 //!
-//! #[stream(Prog, lifetime = "'a")]
+//! #[stream(Prog, lifetime = 'a)]
 //! async fn foo<'a>(s: &'a str) {
 //!     yield Prog::Stage1;
 //!     println!("{}", s);

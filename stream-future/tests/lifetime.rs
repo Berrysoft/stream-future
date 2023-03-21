@@ -4,7 +4,7 @@ use stream_future::*;
 
 #[tokio::test]
 async fn lifetime() {
-    #[stream(lifetime = "'a")]
+    #[stream(lifetime = 'a)]
     async fn foo<'a>(s: &'a str) {
         yield;
         println!("{}", s);

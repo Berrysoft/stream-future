@@ -5,38 +5,25 @@ use syn::{
     parse::{Parse, Parser},
     parse_macro_input,
     visit_mut::{visit_expr_mut, visit_stmt_mut, VisitMut},
-    AttributeArgs, Block, Expr, ItemFn, Lifetime, Lit, Meta, NestedMeta, ReturnType, Type,
+    Block, Expr, ItemFn, Lifetime, ReturnType, Type,
 };
 
 /// See the crate document of [`stream-future`].
 fn stream_impl(attr: TokenStream, input: TokenStream, gen_ty: &str, is_try: bool) -> TokenStream {
     let gen_ty = Ident::parse.parse_str(gen_ty).unwrap();
-    let attr = parse_macro_input!(attr as AttributeArgs);
     let mut p_type = Type::parse.parse2(quote!(())).unwrap();
     let mut lifetime = Lifetime::parse.parse2(quote!('static)).unwrap();
-    for a in attr {
-        match a {
-            NestedMeta::Meta(Meta::Path(path)) => {
-                p_type = Type::parse.parse2(quote!(#path)).unwrap()
+    if !attr.is_empty() {
+        let args_parser = syn::meta::parser(|meta| {
+            if meta.path.is_ident("lifetime") {
+                lifetime = meta.value()?.parse()?;
+            } else {
+                p_type = Type::parse.parse2(meta.path.into_token_stream())?;
             }
-            NestedMeta::Meta(Meta::NameValue(value)) => {
-                if value
-                    .path
-                    .get_ident()
-                    .map(|ident| ident.to_string())
-                    .unwrap_or_default()
-                    == "lifetime"
-                {
-                    if let Lit::Str(lit) = value.lit {
-                        lifetime = Lifetime::parse.parse_str(&lit.value()).unwrap();
-                    }
-                }
-            }
-            NestedMeta::Lit(Lit::Str(lit)) => p_type = Type::parse.parse_str(&lit.value()).unwrap(),
-            _ => unreachable!(),
-        }
+            Ok(())
+        });
+        parse_macro_input!(attr with args_parser);
     }
-
     let mut func = parse_macro_input!(input as ItemFn);
     func.sig.asyncness = None;
     let future_return_type = match func.sig.output {

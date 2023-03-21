@@ -37,13 +37,6 @@ async fn stream() {
 
 #[tokio::test]
 async fn future() {
-    #[stream("()")]
-    async fn foo() -> bool {
-        ready(true).await
-    }
-
-    assert_eq!(foo().await, true);
-
     #[stream]
     async fn bar() -> bool {
         ready(true).await
