@@ -1,4 +1,4 @@
-#![feature(generators)]
+#![feature(coroutines)]
 
 use anyhow::Result;
 use futures_util::{StreamExt, TryStreamExt};
@@ -18,7 +18,7 @@ async fn basic() {
     let gf = foo();
     tokio::pin!(gf);
     assert_eq!((&mut gf).try_collect::<Vec<_>>().await.unwrap(), [0, 1, 2]);
-    assert_eq!(gf.await.unwrap(), true);
+    assert!(gf.await.unwrap());
 }
 
 #[tokio::test]

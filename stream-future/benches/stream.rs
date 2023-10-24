@@ -1,6 +1,6 @@
 #![feature(async_closure)]
-#![feature(generators)]
-#![feature(iter_from_generator)]
+#![feature(coroutines)]
+#![feature(iter_from_coroutine)]
 #![feature(test)]
 
 extern crate test;
@@ -98,9 +98,9 @@ fn iter(b: &mut Bencher) {
 }
 
 #[bench]
-fn generator(b: &mut Bencher) {
+fn coroutine(b: &mut Bencher) {
     async_bench(b, async move || {
-        let s = std::iter::from_generator(|| {
+        let s = std::iter::from_coroutine(|| {
             for i in 0..ITER_MAX {
                 yield i;
             }

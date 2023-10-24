@@ -1,4 +1,4 @@
-#![feature(generators)]
+#![feature(coroutines)]
 
 use futures_util::StreamExt;
 use std::{future::ready, time::Duration};
@@ -18,7 +18,7 @@ async fn basic() {
     let gf = foo();
     tokio::pin!(gf);
     assert_eq!((&mut gf).collect::<Vec<_>>().await, [0, 1, 2]);
-    assert_eq!(gf.await, true);
+    assert!(gf.await);
 }
 
 #[tokio::test]
@@ -42,7 +42,7 @@ async fn future() {
         ready(true).await
     }
 
-    assert_eq!(bar().await, true);
+    assert!(bar().await);
 }
 
 #[tokio::test]

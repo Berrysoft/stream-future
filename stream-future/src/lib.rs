@@ -1,7 +1,7 @@
 //! A [`Future`] with item yielded.
 //!
 //! ```
-//! #![feature(generators)]
+//! #![feature(coroutines)]
 //!
 //! # use anyhow::{Result, Ok};
 //! # use stream_future::stream;
@@ -37,7 +37,7 @@
 //! If a lifetime is needed, specify it in the attribute:
 //!
 //! ```
-//! #![feature(generators)]
+//! #![feature(coroutines)]
 //!
 //! # use stream_future::stream;
 //! enum Prog {
@@ -61,7 +61,7 @@
 //! There's also a macro [`try_stream`] (usually used) to implement a stream iterates [`Result`].
 //!
 //! ```
-//! #![feature(generators)]
+//! #![feature(coroutines)]
 //!
 //! # use stream_future::try_stream;
 //! # use anyhow::Result;
@@ -95,13 +95,13 @@
 #![no_std]
 #![warn(missing_docs)]
 #![feature(associated_type_bounds)]
-#![feature(generator_trait)]
+#![feature(coroutine_trait)]
 #![feature(trait_alias)]
 #![feature(try_trait_v2, try_trait_v2_residual)]
 
 use core::{
     future::Future,
-    ops::{ControlFlow, FromResidual, Generator, GeneratorState, Residual, Try},
+    ops::{ControlFlow, Coroutine, CoroutineState, FromResidual, Residual, Try},
     pin::Pin,
     ptr::NonNull,
     task::{Context, Poll},
@@ -133,19 +133,19 @@ impl ResumeTy {
 
 #[doc(hidden)]
 #[pin_project]
-pub struct GenStreamFuture<P, T: Generator<ResumeTy, Yield = Poll<P>>> {
+pub struct GenStreamFuture<P, T: Coroutine<ResumeTy, Yield = Poll<P>>> {
     #[pin]
     gen: T,
     ret: Option<T::Return>,
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> GenStreamFuture<P, T> {
+impl<P, T: Coroutine<ResumeTy, Yield = Poll<P>>> GenStreamFuture<P, T> {
     pub const fn new(gen: T) -> Self {
         Self { gen, ret: None }
     }
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Future for GenStreamFuture<P, T> {
+impl<P, T: Coroutine<ResumeTy, Yield = Poll<P>>> Future for GenStreamFuture<P, T> {
     type Output = T::Return;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -156,31 +156,31 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Future for GenStreamFuture<P, T
         } else {
             let gen = this.gen;
             match gen.resume(ResumeTy(cx.cast())) {
-                GeneratorState::Yielded(p) => match p {
+                CoroutineState::Yielded(p) => match p {
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(_) => {
                         unsafe { cx.as_ref() }.waker().wake_by_ref();
                         Poll::Pending
                     }
                 },
-                GeneratorState::Complete(x) => Poll::Ready(x),
+                CoroutineState::Complete(x) => Poll::Ready(x),
             }
         }
     }
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>>> Stream for GenStreamFuture<P, T> {
+impl<P, T: Coroutine<ResumeTy, Yield = Poll<P>>> Stream for GenStreamFuture<P, T> {
     type Item = P;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
         let gen = this.gen;
         match gen.resume(ResumeTy(NonNull::from(cx).cast())) {
-            GeneratorState::Yielded(p) => match p {
+            CoroutineState::Yielded(p) => match p {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(p) => Poll::Ready(Some(p)),
             },
-            GeneratorState::Complete(x) => {
+            CoroutineState::Complete(x) => {
                 *this.ret = Some(x);
                 Poll::Ready(None)
             }
@@ -193,19 +193,19 @@ pub type TryStreamItemType<R, P> = <<R as Try>::Residual as Residual<P>>::TryTyp
 
 #[doc(hidden)]
 #[pin_project]
-pub struct GenTryStreamFuture<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> {
+pub struct GenTryStreamFuture<P, T: Coroutine<ResumeTy, Yield = Poll<P>, Return: Try>> {
     #[pin]
     gen: T,
     ret: Option<<T::Return as Try>::Output>,
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> GenTryStreamFuture<P, T> {
+impl<P, T: Coroutine<ResumeTy, Yield = Poll<P>, Return: Try>> GenTryStreamFuture<P, T> {
     pub const fn new(gen: T) -> Self {
         Self { gen, ret: None }
     }
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> Future for GenTryStreamFuture<P, T> {
+impl<P, T: Coroutine<ResumeTy, Yield = Poll<P>, Return: Try>> Future for GenTryStreamFuture<P, T> {
     type Output = T::Return;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -216,20 +216,20 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try>> Future for GenTryS
         } else {
             let gen = this.gen;
             match gen.resume(ResumeTy(cx.cast())) {
-                GeneratorState::Yielded(p) => match p {
+                CoroutineState::Yielded(p) => match p {
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(_) => {
                         unsafe { cx.as_ref() }.waker().wake_by_ref();
                         Poll::Pending
                     }
                 },
-                GeneratorState::Complete(x) => Poll::Ready(x),
+                CoroutineState::Complete(x) => Poll::Ready(x),
             }
         }
     }
 }
 
-impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try<Residual: Residual<P>>>> Stream
+impl<P, T: Coroutine<ResumeTy, Yield = Poll<P>, Return: Try<Residual: Residual<P>>>> Stream
     for GenTryStreamFuture<P, T>
 {
     type Item = <<T::Return as Try>::Residual as Residual<P>>::TryType;
@@ -238,11 +238,11 @@ impl<P, T: Generator<ResumeTy, Yield = Poll<P>, Return: Try<Residual: Residual<P
         let this = self.project();
         let gen = this.gen;
         match gen.resume(ResumeTy(NonNull::from(cx).cast())) {
-            GeneratorState::Yielded(p) => match p {
+            CoroutineState::Yielded(p) => match p {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(p) => Poll::Ready(Some(Self::Item::from_output(p))),
             },
-            GeneratorState::Complete(x) => match x.branch() {
+            CoroutineState::Complete(x) => match x.branch() {
                 ControlFlow::Continue(x) => {
                     *this.ret = Some(x);
                     Poll::Ready(None)

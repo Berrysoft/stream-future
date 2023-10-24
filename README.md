@@ -6,10 +6,10 @@
 This is a `no_std` compatible library to author a `Future` with `Stream` implemented.
 You can author simply with `await` and `yield`.
 
-A nightly feature `generators` is required.
+A nightly feature `coroutines` is required.
 
 ``` rust
-#![feature(generators)]
+#![feature(coroutines)]
 
 use stream_future::stream;
 
@@ -40,7 +40,7 @@ assert_eq!(bar, 0);
 ```
 
 ``` rust
-#![feature(generators)]
+#![feature(coroutines)]
 
 use stream_future::try_stream;
 

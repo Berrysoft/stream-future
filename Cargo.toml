@@ -1,5 +1,4 @@
 [workspace]
-members = [
-    "stream-future",
-    "stream-future-impl",
-]
+members = ["stream-future", "stream-future-impl"]
+
+resolver = "2"
