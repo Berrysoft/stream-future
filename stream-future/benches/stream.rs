@@ -100,11 +100,14 @@ fn iter(b: &mut Bencher) {
 #[bench]
 fn coroutine(b: &mut Bencher) {
     async_bench(b, async move || {
-        let s = std::iter::from_coroutine(|| {
-            for i in 0..ITER_MAX {
-                yield i;
-            }
-        });
+        let s = std::iter::from_coroutine(
+            #[coroutine]
+            || {
+                for i in 0..ITER_MAX {
+                    yield i;
+                }
+            },
+        );
         for v in s {
             black_box(v);
         }

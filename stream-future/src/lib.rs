@@ -94,7 +94,6 @@
 
 #![no_std]
 #![warn(missing_docs)]
-#![feature(associated_type_bounds)]
 #![feature(coroutine_trait)]
 #![feature(trait_alias)]
 #![feature(try_trait_v2, try_trait_v2_residual)]

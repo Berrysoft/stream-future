@@ -48,7 +48,7 @@ fn stream_impl(attr: TokenStream, input: TokenStream, gen_ty: &str, is_try: bool
     func.block = Box::new(
         Block::parse
             .parse2(quote! {{
-                ::stream_future::#gen_ty::<#p_type, _>::new(static move |#[allow(unused_mut)] mut __cx: ::stream_future::ResumeTy| {
+                ::stream_future::#gen_ty::<#p_type, _>::new(#[coroutine] static move |#[allow(unused_mut)] mut __cx: ::stream_future::ResumeTy| {
                     #old_block
                 })
             }})
